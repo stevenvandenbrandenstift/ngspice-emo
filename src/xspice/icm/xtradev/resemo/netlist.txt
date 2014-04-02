@@ -1,0 +1,8 @@
+ netlist by ElektroSim
+v1 0 1 10
+r1 1 0 1 max_power=100
+.save r1[work_zone]
+.save r1[activity]
+.save all
+.dc v1 0 20 2
+.END

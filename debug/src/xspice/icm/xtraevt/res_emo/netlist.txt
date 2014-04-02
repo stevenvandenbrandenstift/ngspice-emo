@@ -1,0 +1,6 @@
+ netlist by ElektroSim
+.model d_res d_res_emo (res_resistance=100 res_power=1000)
+d_res 0 1
+v1 1 0 5V
+.OP
+.END
