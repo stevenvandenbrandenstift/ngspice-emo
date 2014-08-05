@@ -1,7 +1,0 @@
- netlist by ElektroSim
-v1 0 1 1
-a1 1 0 resemo1
-.model resemo1 resemo (resresistance=10 res_power=100 res_activity=1 res_working_zone=[0 1] )
-
-.OP
-.END

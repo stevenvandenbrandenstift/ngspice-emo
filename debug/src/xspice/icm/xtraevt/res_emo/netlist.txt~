@@ -1,5 +1,0 @@
- netlist by ElektroSim
-r1 0 1 3
-v1 1 0 5V
-.OP
-.END
