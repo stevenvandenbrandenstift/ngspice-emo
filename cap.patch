@@ -1,0 +1,222 @@
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capask.c ngspice-26.new/src/spicelib/devices/cap/capask.c
+--- ngspice-26.origin/src/spicelib/devices/cap/capask.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capask.c	2014-08-06 21:12:23.905477000 +0200
+@@ -23,6 +23,11 @@
+     double sr;
+     double si;
+     double vm;
++    double energy;
++    char *activityString;
++    double activity;   
++    char *workingZoneString;
++    double workingZone;
+     static char *msg = "Current and power not available for ac analysis";
+ 
+     switch(which) {
+@@ -164,9 +169,89 @@
+                         here->CAPsenParmNo);
+             }
+             return(OK);
+-
++    case CAP_ENERGY:
++        value->rValue = here->CAPenergy;
++        //value->rValue /= here->RESm;
++        return(OK);
++    
++    case CAP_WORKING_ZONE:
++    		if (ckt->CKTrhsOld) {
++         
++    		workingZone = (*(ckt->CKTrhsOld + here->CAPposNode) -
++                             *(ckt->CKTrhsOld + here->CAPnegNode)) *
++                            here->CAPcapac * (1/2) *
++                            (*(ckt->CKTrhsOld + here->CAPposNode) -
++                             *(ckt->CKTrhsOld + here->CAPnegNode));
++            if(workingZone<0){
++    		workingZone*=-1;
++    		}
++    		workingZone=workingZone/here->CAPenergy;
++            workingZone *= here->CAPm;
++            if(workingZone<0.5){
++            workingZoneString = TMALLOC(char, strlen("Sub-optimal") + 10);
++            sprintf(workingZoneString, "suboptimal:%f",workingZone);
++            value->sValue=workingZoneString;
++            }else if(workingZone<=1){
++                workingZoneString = TMALLOC(char, strlen("Optimal") + 10);
++               sprintf(workingZoneString, "optimal:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }else if(workingZone<1.1){
++                workingZoneString = TMALLOC(char, strlen("Out of Range") + 10);
++                sprintf(workingZoneString, "outofrange:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }else{
++                workingZoneString = TMALLOC(char, strlen("Destructive") + 10);
++                sprintf(workingZoneString, "destructive:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }
++            }else{
++            	workingZoneString = TMALLOC(char, strlen("Unknown"));
++                sprintf(workingZoneString, "Unknown");
++               	value->sValue=workingZoneString;
++            }
++
++        //value->rValue /= here->RESm;
++        return(OK);
++        
++        case CAP_ACTIVITY:
++        	if(ckt->CKTrhsOld){
++			   energy = (*(ckt->CKTrhsOld + here->CAPposNode) -
++                             *(ckt->CKTrhsOld + here->CAPnegNode)) *
++                            here->CAPcapac * (1/2) *
++                            (*(ckt->CKTrhsOld + here->CAPposNode) -
++                             *(ckt->CKTrhsOld + here->CAPnegNode));
++			   energy *= here->CAPm;
++           		if(ckt->CKTcurrentAnalysis &  (DOING_AC | DOING_TRAN)){
++        	   	activity=here->CAPenergySum/ckt->CKTtimePoints[ckt->CKTtimeIndex]; // energy in cap
++        		activity+=energy/ckt->CKTdeltaList[ckt->CKTtimeIndex]; //divide by time lapse
++        		activity/=(here->CAPenergy*here->CAPm); // normalize
++        		}else{ //dc or op
++            		activity=energy/(here->CAPenergy*here->CAPm);
++        		}
++        	if(activity<0.1){
++            activityString = TMALLOC(char, strlen("Inactive") + 10);
++            sprintf(activityString, "inactive:%f",activity);
++            value->sValue=activityString;
++            }else if(activity<0.3){
++                activityString = TMALLOC(char, strlen("Sub-active") + 10);
++                sprintf(activityString, "subactive:%f",activity);
++            	value->sValue=activityString;
++            }else if(activity<=1.0){
++                activityString = TMALLOC(char, strlen("Normal-active") + 10);
++                sprintf(activityString, "normalactive:%f",activity);
++            	value->sValue=activityString;
++            }else{
++                activityString = TMALLOC(char, strlen("Over-active") + 10);
++                sprintf(activityString, "overactive:%f",activity);
++            	value->sValue=activityString;
++            }
++            }else{
++            	activityString = TMALLOC(char, strlen("Unknown"));
++                sprintf(activityString, "Unknown");
++            	value->sValue=activityString;
++            }
++	  return(OK); 
+         default:
+             return(E_BADPARM);
+         }
+-}
+-
++}
+\ No newline at end of file
+Only in ngspice-26.new/src/spicelib/devices/cap: capask.c~
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/cap.c ngspice-26.new/src/spicelib/devices/cap/cap.c
+--- ngspice-26.origin/src/spicelib/devices/cap/cap.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/cap.c	2014-08-06 19:25:17.145543000 +0200
+@@ -33,7 +33,11 @@
+     "dc sens. & imag part of ac sens."),
+     OPU(  "sens_mag",    CAP_QUEST_SENS_MAG,  IF_REAL, "sensitivity of ac magnitude"),
+     OPU(  "sens_ph",     CAP_QUEST_SENS_PH,   IF_REAL, "sensitivity of ac phase"),
+-    OPU(  "sens_cplx",   CAP_QUEST_SENS_CPLX, IF_COMPLEX, "ac sensitivity")
++    OPU(  "sens_cplx",   CAP_QUEST_SENS_CPLX, IF_COMPLEX, "ac sensitivity"),
++    IOPP( "energy",   	CAP_ENERGY,	     IF_REAL,    "max energy density"),
++    IOP(   "activity",   	CAP_ACTIVITY,	     IF_STRING,    "activity emotion"),
++    IOP(   "work_zone",   	CAP_WORKING_ZONE,	     IF_STRING,    "working zone emotion"),
++    IOPU(   "energy_sum",   	CAP_ENERGY_SUM,	     IF_REAL,    "activity energy sum")
+ };
+ 
+ IFparm CAPmPTable[] = { /* names of model parameters */
+@@ -68,4 +72,4 @@
+ int	CAPpTSize = NUMELEMS(CAPpTable);
+ int	CAPmPTSize = NUMELEMS(CAPmPTable);
+ int	CAPiSize = sizeof(CAPinstance);
+-int	CAPmSize = sizeof(CAPmodel);
++int	CAPmSize = sizeof(CAPmodel);
+\ No newline at end of file
+Only in ngspice-26.new/src/spicelib/devices/cap: cap.c~
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capdefs.h ngspice-26.new/src/spicelib/devices/cap/capdefs.h
+--- ngspice-26.origin/src/spicelib/devices/cap/capdefs.h	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capdefs.h	2014-08-06 20:04:04.408852000 +0200
+@@ -7,7 +7,6 @@
+ #ifndef CAP
+ #define CAP
+ 
+-
+ #include "ngspice/ifsim.h"
+ #include "ngspice/complex.h"
+ #include "ngspice/gendefs.h"
+@@ -60,6 +59,14 @@
+     unsigned CAPbv_maxGiven : 1;    /* flags indicates maximum voltage is given */
+     int    CAPsenParmNo;         /* parameter # for sensitivity use;
+                 set equal to  0 if not a design parameter*/
++    unsigned CAPenergyGiven     :1;
++	unsigned CAPactivityGiven     :1;
++	unsigned CAPworkingZoneGiven     :1;
++
++	double CAPenergySum;
++    double CAPenergy;
++    char *CAPactivity;
++    char *CAPworkingZone;
+ 
+ } CAPinstance ;
+ 
+@@ -126,6 +133,11 @@
+ #define CAP_TC1 12
+ #define CAP_TC2 13
+ #define CAP_BV_MAX 14
++/*emotions*/
++#define CAP_ENERGY 15
++#define CAP_ACTIVITY 16
++#define CAP_WORKING_ZONE 17
++#define CAP_ENERGY_SUM 18
+ 
+ /* model parameters */
+ #define CAP_MOD_CJ 101
+@@ -154,4 +166,4 @@
+ 
+ #include "capext.h"
+ 
+-#endif /*CAP*/
++#endif /*CAP*/
+\ No newline at end of file
+Only in ngspice-26.new/src/spicelib/devices/cap: capdefs.h~
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capinit.c ngspice-26.new/src/spicelib/devices/cap/capinit.c
+--- ngspice-26.origin/src/spicelib/devices/cap/capinit.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capinit.c	2014-08-06 19:11:08.218885000 +0200
+@@ -9,7 +9,7 @@
+ 
+ SPICEdev CAPinfo = {
+     {   "Capacitor",
+-        "Fixed capacitor",
++        "emotional fixed capacitor",
+ 
+         &CAPnSize,
+         &CAPnSize,
+@@ -80,4 +80,4 @@
+ get_cap_info(void)
+ {
+     return &CAPinfo;
+-}
++}
+\ No newline at end of file
+Only in ngspice-26.new/src/spicelib/devices/cap: capinit.c~
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capparam.c ngspice-26.new/src/spicelib/devices/cap/capparam.c
+--- ngspice-26.origin/src/spicelib/devices/cap/capparam.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capparam.c	2014-08-06 21:17:23.382140000 +0200
+@@ -77,8 +77,13 @@
+         here->CAPbv_max = value->rValue;
+         here->CAPbv_maxGiven = TRUE;
+         break;
++    case CAP_ENERGY:
++   	   here->CAPenergy = value->rValue;
++   	   here->CAPenergyGiven=TRUE;
++        break;
++
+     default:
+         return(E_BADPARM);
+     }
+     return(OK);
+-}
++}
+\ No newline at end of file
+Only in ngspice-26.new/src/spicelib/devices/cap: capparam.c~
+Only in ngspice-26.new/src/spicelib/devices/cap: .deps
+Only in ngspice-26.new/src/spicelib/devices/cap: Makefile

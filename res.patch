@@ -70,7 +70,7 @@ diff -Naur ngspice-26.pristine/src/spicelib/devices/res/resask.c ngspice-26.new/
 +                            (*(ckt->CKTrhsOld + fast->RESposNode) -
 +                             *(ckt->CKTrhsOld + fast->RESnegNode));
 +			   power *= fast->RESm;
-+        		if(ckt->CKTcurrentAnalysis & DOING_AC){
++        		if(ckt->CKTcurrentAnalysis &(DOING_AC | DOING_TRAN)){
 +        	   	activity=fast->RESpowerSum/ckt->CKTtimePoints[ckt->CKTtimeIndex]; // mean dissipated power
 +        		activity+=power/ckt->CKTdeltaList[ckt->CKTtimeIndex]; //divide by time lapse
 +        		activity/=(fast->RESmaxPower*fast->RESm); // normalize
