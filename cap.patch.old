@@ -1,6 +1,6 @@
 diff -aur ngspice-26.origin/src/spicelib/devices/cap/capask.c ngspice-26.new/src/spicelib/devices/cap/capask.c
 --- ngspice-26.origin/src/spicelib/devices/cap/capask.c	2014-01-11 16:28:59.000000000 +0100
-+++ ngspice-26.new/src/spicelib/devices/cap/capask.c	2014-08-11 13:15:23.505120000 +0200
++++ ngspice-26.new/src/spicelib/devices/cap/capask.c	2014-08-11 13:15:23.505120095 +0200
 @@ -23,6 +23,11 @@
      double sr;
      double si;
@@ -19,7 +19,7 @@ diff -aur ngspice-26.origin/src/spicelib/devices/cap/capask.c ngspice-26.new/src
              return(OK);
 -
 +    case CAP_ENERGY:
-+        value->rValue = (here->CAPratedVoltage*here->CAPratedVoltage*here->CAPcapac)/2;
++        value->rValue = (here->CAPratedVoltage*here->CAPratedVoltage*here->CAPcapac)*1/2;
 +        value->rValue *= here->CAPm;
 +        //value->rValue /= here->RESm;
 +        return(OK);
@@ -40,7 +40,7 @@ diff -aur ngspice-26.origin/src/spicelib/devices/cap/capask.c ngspice-26.new/src
 +            if(workingZone<0){
 +    		workingZone*=-1;
 +    		}
-+    		workingZone=workingZone/here->CAPenergy;
++    	     workingZone=workingZone/here->CAPenergy;
 +            workingZone *= here->CAPm;
 +            if(workingZone<0.5){
 +            workingZoneString = TMALLOC(char, strlen("Sub-optimal") + 10);
@@ -113,7 +113,7 @@ diff -aur ngspice-26.origin/src/spicelib/devices/cap/capask.c ngspice-26.new/src
 -
 diff -aur ngspice-26.origin/src/spicelib/devices/cap/cap.c ngspice-26.new/src/spicelib/devices/cap/cap.c
 --- ngspice-26.origin/src/spicelib/devices/cap/cap.c	2014-01-11 16:28:59.000000000 +0100
-+++ ngspice-26.new/src/spicelib/devices/cap/cap.c	2014-08-11 13:07:34.331797000 +0200
++++ ngspice-26.new/src/spicelib/devices/cap/cap.c	2014-08-11 13:07:34.331797175 +0200
 @@ -33,7 +33,12 @@
      "dc sens. & imag part of ac sens."),
      OPU(  "sens_mag",    CAP_QUEST_SENS_MAG,  IF_REAL, "sensitivity of ac magnitude"),
@@ -124,13 +124,13 @@ diff -aur ngspice-26.origin/src/spicelib/devices/cap/cap.c ngspice-26.new/src/sp
 +    IOP(   "activity",   	CAP_ACTIVITY,	     IF_STRING,    "activity emotion"),
 +    IOP(   "work_zone",   	CAP_WORKING_ZONE,	     IF_STRING,    "working zone emotion"),
 +    IOPU(   "energy_sum",   	CAP_ENERGY_SUM,	     IF_REAL,    "activity energy sum"),
-+    IOPU( "energy",   	CAP_ENERGY,	     IF_REAL,    "max energy density"),
++    IOP( "energy",   	CAP_ENERGY,	     IF_REAL,    "max energy density")
  };
  
  IFparm CAPmPTable[] = { /* names of model parameters */
 diff -aur ngspice-26.origin/src/spicelib/devices/cap/capdefs.h ngspice-26.new/src/spicelib/devices/cap/capdefs.h
 --- ngspice-26.origin/src/spicelib/devices/cap/capdefs.h	2014-01-11 16:28:59.000000000 +0100
-+++ ngspice-26.new/src/spicelib/devices/cap/capdefs.h	2014-08-11 13:10:21.371793000 +0200
++++ ngspice-26.new/src/spicelib/devices/cap/capdefs.h	2014-08-11 13:10:21.371793465 +0200
 @@ -7,7 +7,6 @@
  #ifndef CAP
  #define CAP
@@ -162,11 +162,11 @@ diff -aur ngspice-26.origin/src/spicelib/devices/cap/capdefs.h ngspice-26.new/sr
  #define CAP_TC2 13
  #define CAP_BV_MAX 14
 +/*emotions*/
-+#define CAP_ENERGY 15
++#define CAP_ENERGY 19
 +#define CAP_ACTIVITY 16
 +#define CAP_WORKING_ZONE 17
 +#define CAP_ENERGY_SUM 18
-+#define CAP_RATED_VOLTAGE 19
++#define CAP_RATED_VOLTAGE 15
 +
  
  /* model parameters */
@@ -192,8 +192,8 @@ diff -aur ngspice-26.origin/src/spicelib/devices/cap/capinit.c ngspice-26.new/sr
 \ No newline at end of file
 diff -aur ngspice-26.origin/src/spicelib/devices/cap/capparam.c ngspice-26.new/src/spicelib/devices/cap/capparam.c
 --- ngspice-26.origin/src/spicelib/devices/cap/capparam.c	2014-01-11 16:28:59.000000000 +0100
-+++ ngspice-26.new/src/spicelib/devices/cap/capparam.c	2014-08-11 20:04:29.534575000 +0200
-@@ -77,6 +77,12 @@
++++ ngspice-26.new/src/spicelib/devices/cap/capparam.c	2014-08-11 13:16:53.768451426 +0200
+@@ -77,6 +77,11 @@
          here->CAPbv_max = value->rValue;
          here->CAPbv_maxGiven = TRUE;
          break;
@@ -202,20 +202,8 @@ diff -aur ngspice-26.origin/src/spicelib/devices/cap/capparam.c ngspice-26.new/s
 +	   here->CAPenergy = (here->CAPratedVoltage*here->CAPratedVoltage*here->CAPcapac)*1/2;
 +   	   here->CAPratedVoltageGiven=TRUE;
 +        break;
-+
      default:
          return(E_BADPARM);
      }
-diff -aur ngspice-26.origin/src/spicelib/devices/cap/capsload.c ngspice-26.new/src/spicelib/devices/cap/capsload.c
---- ngspice-26.origin/src/spicelib/devices/cap/capsload.c	2014-01-11 16:28:59.000000000 +0100
-+++ ngspice-26.new/src/spicelib/devices/cap/capsload.c	2014-08-11 20:13:55.767896000 +0200
-@@ -65,7 +65,8 @@
- 
-             vcap = *(ckt->CKTrhsOld+here->CAPposNode) 
-                 - *(ckt->CKTrhsOld+here->CAPnegNode) ;   
--
-+	    here->CAPenergySum+=vcap*vcap*here->CAPcapac*1/2*ckt->CKTdeltaList[ckt->CKTtimeIndex];
-+	
-             for(iparmno=1;iparmno<=info->SENparms;iparmno++){
-                 Osxp = tag0 * *(ckt->CKTstate1 + here->CAPsensxp
-                             + 2*(iparmno - 1))
+Only in ngspice-26.new/src/spicelib/devices/cap: .deps
+Only in ngspice-26.new/src/spicelib/devices/cap: Makefile

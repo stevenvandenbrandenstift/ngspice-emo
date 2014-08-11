@@ -65,7 +65,8 @@ CAPsLoad(GENmodel *inModel, CKTcircuit *ckt)
 
             vcap = *(ckt->CKTrhsOld+here->CAPposNode) 
                 - *(ckt->CKTrhsOld+here->CAPnegNode) ;   
-
+	    here->CAPenergySum+=vcap*vcap*here->CAPcapac*1/2*ckt->CKTdeltaList[ckt->CKTtimeIndex];
+	
             for(iparmno=1;iparmno<=info->SENparms;iparmno++){
                 Osxp = tag0 * *(ckt->CKTstate1 + here->CAPsensxp
                             + 2*(iparmno - 1))

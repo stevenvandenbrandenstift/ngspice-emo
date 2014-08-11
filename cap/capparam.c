@@ -79,6 +79,7 @@ CAPparam(int param, IFvalue *value, GENinstance *inst, IFvalue *select)
         break;
     case CAP_RATED_VOLTAGE:
    	   here->CAPratedVoltage = value->rValue;
+	   here->CAPenergy = (here->CAPratedVoltage*here->CAPratedVoltage*here->CAPcapac)*1/2;
    	   here->CAPratedVoltageGiven=TRUE;
         break;
 
