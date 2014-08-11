@@ -59,12 +59,15 @@ typedef struct sCAPinstance {
     unsigned CAPbv_maxGiven : 1;    /* flags indicates maximum voltage is given */
     int    CAPsenParmNo;         /* parameter # for sensitivity use;
                 set equal to  0 if not a design parameter*/
-    unsigned CAPenergyGiven     :1;
+    unsigned CAPratedVoltageGiven     :1;
 	unsigned CAPactivityGiven     :1;
 	unsigned CAPworkingZoneGiven     :1;
+    unsigned CAPenergyGiven     :1;
+
 
 	double CAPenergySum;
     double CAPenergy;
+    double CAPratedVoltage;
     char *CAPactivity;
     char *CAPworkingZone;
 
@@ -138,6 +141,8 @@ typedef struct sCAPmodel {      /* model structure for a capacitor */
 #define CAP_ACTIVITY 16
 #define CAP_WORKING_ZONE 17
 #define CAP_ENERGY_SUM 18
+#define CAP_RATED_VOLTAGE 19
+
 
 /* model parameters */
 #define CAP_MOD_CJ 101

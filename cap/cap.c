@@ -34,10 +34,11 @@ IFparm CAPpTable[] = { /* parameters */
     OPU(  "sens_mag",    CAP_QUEST_SENS_MAG,  IF_REAL, "sensitivity of ac magnitude"),
     OPU(  "sens_ph",     CAP_QUEST_SENS_PH,   IF_REAL, "sensitivity of ac phase"),
     OPU(  "sens_cplx",   CAP_QUEST_SENS_CPLX, IF_COMPLEX, "ac sensitivity"),
-    IOPP( "energy",   	CAP_ENERGY,	     IF_REAL,    "max energy density"),
+    IOPP( "rated_voltage",   	CAP_RATED_VOLTAGE,	     IF_REAL,    "rated voltage"),
     IOP(   "activity",   	CAP_ACTIVITY,	     IF_STRING,    "activity emotion"),
     IOP(   "work_zone",   	CAP_WORKING_ZONE,	     IF_STRING,    "working zone emotion"),
-    IOPU(   "energy_sum",   	CAP_ENERGY_SUM,	     IF_REAL,    "activity energy sum")
+    IOPU(   "energy_sum",   	CAP_ENERGY_SUM,	     IF_REAL,    "activity energy sum"),
+    IOPU( "energy",   	CAP_ENERGY,	     IF_REAL,    "max energy density"),
 };
 
 IFparm CAPmPTable[] = { /* names of model parameters */

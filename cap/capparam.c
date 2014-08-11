@@ -77,9 +77,9 @@ CAPparam(int param, IFvalue *value, GENinstance *inst, IFvalue *select)
         here->CAPbv_max = value->rValue;
         here->CAPbv_maxGiven = TRUE;
         break;
-    case CAP_ENERGY:
-   	   here->CAPenergy = value->rValue;
-   	   here->CAPenergyGiven=TRUE;
+    case CAP_RATE_VOLTAGE:
+   	   here->CAPratedVoltage = value->rValue;
+   	   here->CAPratedVoltageGiven=TRUE;
         break;
 
     default:

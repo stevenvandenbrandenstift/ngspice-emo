@@ -170,16 +170,22 @@ CAPask(CKTcircuit *ckt, GENinstance *inst, int which, IFvalue *value,
             }
             return(OK);
     case CAP_ENERGY:
-        value->rValue = here->CAPenergy;
+        value->rValue = (here->CAPratedVoltage*here->CAPratedVoltage*here->CAPcapac)/2;
+        value->rValue *= here->CAPm;
         //value->rValue /= here->RESm;
         return(OK);
     
+   case CAP_RATED_VOLTAGE:
+        value->rValue = here->CAPratedVoltage;
+        //value->rValue /= here->RESm;
+        return(OK);
+
     case CAP_WORKING_ZONE:
     		if (ckt->CKTrhsOld) {
          
     		workingZone = (*(ckt->CKTrhsOld + here->CAPposNode) -
                              *(ckt->CKTrhsOld + here->CAPnegNode)) *
-                            here->CAPcapac * (1/2) *
+                            here->CAPcapac* (1/2) *
                             (*(ckt->CKTrhsOld + here->CAPposNode) -
                              *(ckt->CKTrhsOld + here->CAPnegNode));
             if(workingZone<0){
