@@ -1,0 +1,318 @@
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/resask.c ngspice-26.new/src/spicelib/devices/res/resask.c
+--- ngspice-26.pristine/src/spicelib/devices/res/resask.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/resask.c	2014-08-04 14:30:53.911516000 +0200
+@@ -27,6 +27,11 @@
+     double sr;
+     double si;
+     double vm;
++    double power;
++    char *activityString;
++    double activity;   
++    char *workingZoneString;
++    double workingZone;
+     static char *msg = "Current and power not available for ac analysis";
+ 
+     switch(which) {
+@@ -177,8 +182,88 @@
+             errRtn = "RESask";
+             strcpy(errMsg, msgloc);
+             return(E_ASKCURRENT);
+-        }
++        } 
++    case RES_MAX_POWER:
++        value->rValue = fast->RESmaxPower;
++        //value->rValue /= fast->RESm;
++        return(OK);
++    case RES_WORKING_ZONE:
++    		if (ckt->CKTrhsOld) {
+         
++    		workingZone = (*(ckt->CKTrhsOld + fast->RESposNode) -
++                             *(ckt->CKTrhsOld + fast->RESnegNode)) *
++                            fast->RESconduct *
++                            (*(ckt->CKTrhsOld + fast->RESposNode) -
++                             *(ckt->CKTrhsOld + fast->RESnegNode));
++            if(workingZone<0){
++    		workingZone*=-1;
++    		}
++    		workingZone=workingZone/fast->RESmaxPower;
++            workingZone *= fast->RESm;
++            if(workingZone<0.5){
++            workingZoneString = TMALLOC(char, strlen("Sub-optimal") + 10);
++            sprintf(workingZoneString, "suboptimal:%f",workingZone);
++            value->sValue=workingZoneString;
++            }else if(workingZone<=1){
++                workingZoneString = TMALLOC(char, strlen("Optimal") + 10);
++                sprintf(workingZoneString, "optimal:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }else if(workingZone<1.1){
++                workingZoneString = TMALLOC(char, strlen("Out of Range") + 10);
++                sprintf(workingZoneString, "outofrange:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }else{
++                workingZoneString = TMALLOC(char, strlen("Destructive") + 10);
++                sprintf(workingZoneString, "destructive:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }
++            }else{
++            	workingZoneString = TMALLOC(char, strlen("Unknown"));
++                sprintf(workingZoneString, "Unknown");
++            	value->sValue=workingZoneString;
++            }
++
++        //value->rValue /= fast->RESm;
++        return(OK);
++        
++        case RES_ACTIVITY:
++        	if(ckt->CKTrhsOld){
++			power = (*(ckt->CKTrhsOld + fast->RESposNode) -
++                             *(ckt->CKTrhsOld + fast->RESnegNode)) *
++                            fast->RESconduct *
++                            (*(ckt->CKTrhsOld + fast->RESposNode) -
++                             *(ckt->CKTrhsOld + fast->RESnegNode));
++			   power *= fast->RESm;
++        		if(ckt->CKTcurrentAnalysis &(DOING_AC | DOING_TRAN)){
++        	   	activity=fast->RESpowerSum/ckt->CKTtimePoints[ckt->CKTtimeIndex]; // mean dissipated power
++        		activity+=power/ckt->CKTdeltaList[ckt->CKTtimeIndex]; //divide by time lapse
++        		activity/=(fast->RESmaxPower*fast->RESm); // normalize
++        		}else{ //dc or op
++            		activity=power/(fast->RESmaxPower*fast->RESm);
++        		}
++        	if(activity<0.1){
++            activityString = TMALLOC(char, strlen("Inactive") + 10);
++            sprintf(activityString, "inactive:%f",activity);
++            value->sValue=activityString;
++            }else if(activity<0.3){
++                activityString = TMALLOC(char, strlen("Sub-active") + 10);
++                sprintf(activityString, "subactive:%f",activity);
++            	value->sValue=activityString;
++            }else if(activity<=1.0){
++                activityString = TMALLOC(char, strlen("Normal-active") + 10);
++                sprintf(activityString, "normalactive:%f",activity);
++            	value->sValue=activityString;
++            }else{
++                activityString = TMALLOC(char, strlen("Over-active") + 10);
++                sprintf(activityString, "overactive:%f",activity);
++            	value->sValue=activityString;
++            }
++            }else{
++            	activityString = TMALLOC(char, strlen("Unknown"));
++                sprintf(activityString, "Unknown");
++            	value->sValue=activityString;
++            }
++	  return(OK); 
+     default:
+         return(E_BADPARM);
+     }
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/res.c ngspice-26.new/src/spicelib/devices/res/res.c
+--- ngspice-26.pristine/src/spicelib/devices/res/res.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/res.c	2014-08-04 14:30:53.911516000 +0200
+@@ -14,8 +14,7 @@
+     IOPP(  "resistance", 	RES_RESIST, 	     IF_REAL,    "Resistance"),
+     IOPAA( "ac",		RES_ACRESIST,	     IF_REAL,    "AC resistance value"),
+     IOPZU( "temp",		RES_TEMP,	     IF_REAL,    "Instance operating temperature"),
+-    IOPZ(  "dtemp",	RES_DTEMP,	     IF_REAL,
+-    "Instance temperature difference with the rest of the circuit"),
++    IOPZ(  "dtemp",	RES_DTEMP,	     IF_REAL, 	"Instance temperature difference with the rest of the circuit"),
+     IOPQU( "l",		RES_LENGTH,	     IF_REAL,    "Length"),
+     IOPZU( "w",		RES_WIDTH,	     IF_REAL,    "Width"),
+     IOPU(  "m",		RES_M,		     IF_REAL,    "Multiplication factor"),
+@@ -36,7 +35,11 @@
+     "dc sensitivity and imag part of ac sensitivity"),
+     OPU(   "sens_mag",    RES_QUEST_SENS_MAG,   IF_REAL,    "ac sensitivity of magnitude"),
+     OPU(   "sens_ph",     RES_QUEST_SENS_PH,    IF_REAL,    "ac sensitivity of phase"),
+-    OPU(   "sens_cplx",   RES_QUEST_SENS_CPLX,  IF_COMPLEX, "ac sensitivity")
++    OPU(   "sens_cplx",   RES_QUEST_SENS_CPLX,  IF_COMPLEX, "ac sensitivity"),
++    IOPP( "max_power",   	RES_MAX_POWER,	     IF_REAL,    "max power value"),
++    IOP(   "activity",   	RES_ACTIVITY,	     IF_STRING,    "activity emotion"),
++    IOP(   "work_zone",   	RES_WORKING_ZONE,	     IF_STRING,    "working zone emotion"),
++    IOPU(   "power_sum",   	RES_POWER_SUM,	     IF_REAL,    "activity power sum")
+ };
+ 
+ IFparm RESmPTable[] = { /* model parameters */
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/resdefs.h ngspice-26.new/src/spicelib/devices/res/resdefs.h
+--- ngspice-26.pristine/src/spicelib/devices/res/resdefs.h	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/resdefs.h	2014-08-04 14:30:53.911516000 +0200
+@@ -67,6 +67,14 @@
+     unsigned RESbv_maxGiven : 1;    /* flags indicates maximum voltage is given */
+     int    RESsenParmNo;            /* parameter # for sensitivity use;
+                                      * set equal to  0 if not a design parameter*/
++    unsigned RESmaxPowerGiven     :1;
++	unsigned RESactivityGiven     :1;
++	unsigned RESworkingZoneGiven     :1;
++
++	double RESpowerSum;
++    double RESmaxPower;
++    char *RESactivity;
++    char *RESworkingZone;
+ 
+     /* indices to array of RES noise sources */
+ 
+@@ -96,6 +104,8 @@
+                                  * model */
+     IFuid RESmodName;       /* pointer to character string naming this model */
+ 
++    /* --- end of generic struct GENmodel --- */
++
+     double REStnom;         /* temperature at which resistance measured */
+     double REStempCoeff1;   /* first temperature coefficient of resistors */
+     double REStempCoeff2;   /* second temperature coefficient of resistors */
+@@ -120,6 +130,7 @@
+     unsigned RESfNexpGiven      :1; /* flag to indicate af given */
+     unsigned RESresGiven        :1; /* flag to indicate model resistance given */
+     unsigned RESbv_maxGiven     :1; /* flags indicates maximum voltage is given */
++
+ } RESmodel;
+ 
+ /* device parameters */
+@@ -142,6 +153,11 @@
+ #define RES_TC1 16
+ #define RES_TC2 17
+ #define RES_BV_MAX 18
++/*emotions*/
++#define RES_MAX_POWER 19
++#define RES_ACTIVITY 20
++#define RES_WORKING_ZONE 21
++#define RES_POWER_SUM 22
+ 
+ /* model parameters */
+ #define RES_MOD_TC1 101
+@@ -157,6 +173,7 @@
+ #define RES_MOD_AF 111
+ #define RES_MOD_BV_MAX 112
+ 
++
+ /* device questions */
+ #define RES_QUEST_SENS_REAL      201
+ #define RES_QUEST_SENS_IMAG      202
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/resinit.c ngspice-26.new/src/spicelib/devices/res/resinit.c
+--- ngspice-26.pristine/src/spicelib/devices/res/resinit.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/resinit.c	2014-08-04 14:30:53.914850000 +0200
+@@ -10,7 +10,7 @@
+ SPICEdev RESinfo = {
+     {
+         "Resistor",
+-        "Simple linear resistor",
++        "emotional linear resistor",
+ 
+         &RESnSize,
+         &RESnSize,
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/resload.c ngspice-26.new/src/spicelib/devices/res/resload.c
+--- ngspice-26.pristine/src/spicelib/devices/res/resload.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/resload.c	2014-08-04 14:30:53.914850000 +0200
+@@ -17,7 +17,6 @@
+ {
+     RESmodel *model = (RESmodel *)inModel;
+     double m;
+-
+     /*  loop through all the resistor models */
+     for( ; model != NULL; model = model->RESnextModel ) {
+         RESinstance *here;
+@@ -35,6 +34,7 @@
+             *(here->RESnegNegptr) += m * here->RESconduct;
+             *(here->RESposNegptr) -= m * here->RESconduct;
+             *(here->RESnegPosptr) -= m * here->RESconduct;
++
+         }
+     }
+     return(OK);
+@@ -72,6 +72,9 @@
+                 *(here->RESposNegptr) -= m * here->RESconduct;
+                 *(here->RESnegPosptr) -= m * here->RESconduct;
+             }
++            
++             //add  power dissipation
++            here->RESpowerSum+=(here->REScurrent*here->REScurrent*here->RESresist)*ckt->CKTdeltaList[ckt->CKTtimeIndex];
+         }
+     }
+     return(OK);
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/resmask.c ngspice-26.new/src/spicelib/devices/res/resmask.c
+--- ngspice-26.pristine/src/spicelib/devices/res/resmask.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/resmask.c	2014-08-04 14:30:53.914850000 +0200
+@@ -66,6 +66,8 @@
+         case RES_MOD_R:
+             value->rValue = model->RESres;
+             return(OK);
++
++
+         default:
+             return(E_BADPARM);
+     }
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/resmpar.c ngspice-26.new/src/spicelib/devices/res/resmpar.c
+--- ngspice-26.pristine/src/spicelib/devices/res/resmpar.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/resmpar.c	2014-08-04 14:30:53.914850000 +0200
+@@ -15,6 +15,8 @@
+ int
+ RESmParam(int param, IFvalue *value, GENmodel *inModel)
+ {
++        
++        
+     RESmodel *model = (RESmodel *)inModel;
+ 
+     switch(param) {
+@@ -34,6 +36,8 @@
+         model->RESsheetRes = value->rValue;
+         model->RESsheetResGiven = TRUE;
+         break;
++
++
+     case RES_MOD_DEFWIDTH:
+         model->RESdefWidth = value->rValue;
+         model->RESdefWidthGiven = TRUE;
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/resparam.c ngspice-26.new/src/spicelib/devices/res/resparam.c
+--- ngspice-26.pristine/src/spicelib/devices/res/resparam.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/resparam.c	2014-08-04 14:30:53.914850000 +0200
+@@ -78,6 +78,11 @@
+         here->RESbv_max = value->rValue;
+         here->RESbv_maxGiven = TRUE;
+         break;
++    case RES_MAX_POWER:
++   	   here->RESmaxPower = value->rValue;
++   	   here->RESmaxPowerGiven=TRUE;
++        break;
++
+     default:
+         return(E_BADPARM);
+     }
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/ressetup.c ngspice-26.new/src/spicelib/devices/res/ressetup.c
+--- ngspice-26.pristine/src/spicelib/devices/res/ressetup.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/ressetup.c	2014-08-04 14:30:53.914850000 +0200
+@@ -10,8 +10,7 @@
+ #include "ngspice/sperror.h"
+ 
+ 
+-int
+-RESsetup(SMPmatrix *matrix, GENmodel *inModel, CKTcircuit*ckt, int *state)
++int RESsetup(SMPmatrix *matrix, GENmodel *inModel, CKTcircuit*ckt, int *state)
+         /* load the resistor structure with those pointers needed later
+          * for fast matrix loading
+          */
+@@ -36,13 +35,15 @@
+                 here->RESm = 1.0;
+             if(!here->RESbv_maxGiven)
+                 here->RESbv_max = model->RESbv_max;
++                
++            //
++            here->RESpowerSum=0;
+ 
+ /* macro to make elements with built in test for out of memory */
+ #define TSTALLOC(ptr,first,second) \
+ do { if((here->ptr = SMPmakeElt(matrix, here->first, here->second)) == NULL){\
+     return(E_NOMEM);\
+ } } while(0)
+-
+             TSTALLOC(RESposPosptr, RESposNode, RESposNode);
+             TSTALLOC(RESnegNegptr, RESnegNode, RESnegNode);
+             TSTALLOC(RESposNegptr, RESposNode, RESnegNode);
+diff -Naur ngspice-26.pristine/src/spicelib/devices/res/restemp.c ngspice-26.new/src/spicelib/devices/res/restemp.c
+--- ngspice-26.pristine/src/spicelib/devices/res/restemp.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/res/restemp.c	2014-08-04 14:30:53.914850000 +0200
+@@ -10,8 +10,7 @@
+ #include "resdefs.h"
+ #include "ngspice/sperror.h"
+ 
+-int
+-REStemp(GENmodel *inModel, CKTcircuit *ckt)
++int REStemp(GENmodel *inModel, CKTcircuit *ckt)
+ /* perform the temperature update to the resistors
+  * calculate the conductance as a function of the
+  * given nominal and current temperatures - the

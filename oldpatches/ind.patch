@@ -1,0 +1,197 @@
+diff -aur ngspice-26.origin/src/spicelib/devices/ind/indask.c ngspice-26.new/src/spicelib/devices/ind/indask.c
+--- ngspice-26.origin/src/spicelib/devices/ind/indask.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/ind/indask.c	2014-08-20 18:59:58.292645455 +0200
+@@ -21,6 +21,11 @@
+     double sr;
+     double si;
+     double vm;
++    double energy;
++    char *activityString;
++    double activity;   
++    char *workingZoneString;
++    double workingZone;
+     static char *msg = "Current and power not available for ac analysis";
+ 
+     switch(which) {
+@@ -138,6 +143,87 @@
+                         here->INDsenParmNo);
+             }
+             return(OK);
++    case IND_ENERGY:
++        value->rValue = (here->INDratedCurrent*here->INDratedCurrent*here->INDinduct)/2;
++        return(OK);
++    
++   case IND_RATED_CURRENT:
++        value->rValue = here->INDratedCurrent;
++        return(OK);
++
++    case IND_WORKING_ZONE:
++    		if (ckt->CKTrhsOld) {
++         
++    		workingZone = *(ckt->CKTrhsOld + here->INDbrEq) *
++                            here->INDinduct* (1/2) *
++                            ( *(ckt->CKTrhsOld + here->INDbrEq));
++            if(workingZone<0){
++    		workingZone*=-1;
++    		}
++    		workingZone=workingZone/here->INDenergy;
++            workingZone *= here->INDm;
++            if(workingZone<0.5){
++            workingZoneString = TMALLOC(char, strlen("Sub-optimal") + 10);
++            sprintf(workingZoneString, "suboptimal:%f",workingZone);
++            value->sValue=workingZoneString;
++            }else if(workingZone<=1){
++               workingZoneString = TMALLOC(char, strlen("Optimal") + 10);
++               sprintf(workingZoneString, "optimal:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }else if(workingZone<1.1){
++                workingZoneString = TMALLOC(char, strlen("Out of Range") + 10);
++                sprintf(workingZoneString, "outofrange:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }else{
++                workingZoneString = TMALLOC(char, strlen("Destructive") + 10);
++                sprintf(workingZoneString, "destructive:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }
++            }else{
++            	workingZoneString = TMALLOC(char, strlen("Unknown"));
++                sprintf(workingZoneString, "Unknown");
++               	value->sValue=workingZoneString;
++            }
++
++        //value->rValue /= here->RESm;
++        return(OK);
++        
++        case IND_ACTIVITY:
++        	if(ckt->CKTrhsOld){
++			   energy = ( *(ckt->CKTrhsOld + here->INDbrEq)) *
++                            here->INDinduct * (1/2) *
++                            ( *(ckt->CKTrhsOld + here->INDbrEq));
++			   energy *= here->INDm;
++           		if(ckt->CKTcurrentAnalysis &  (DOING_AC | DOING_TRAN)){
++        	   	activity=here->INDenergySum/ckt->CKTtimePoints[ckt->CKTtimeIndex]; // energy in cap
++        		activity+=energy/ckt->CKTdeltaList[ckt->CKTtimeIndex]; //divide by time lapse
++        		activity/=(here->INDenergy*here->INDm); // normalize
++        		}else{ //dc or op
++            		activity=energy/(here->INDenergy*here->INDm);
++        		}
++        	if(activity<0.1){
++            activityString = TMALLOC(char, strlen("Inactive") + 10);
++            sprintf(activityString, "inactive:%f",activity);
++            value->sValue=activityString;
++            }else if(activity<0.3){
++                activityString = TMALLOC(char, strlen("Sub-active") + 10);
++                sprintf(activityString, "subactive:%f",activity);
++            	value->sValue=activityString;
++            }else if(activity<=1.0){
++                activityString = TMALLOC(char, strlen("Normal-active") + 10);
++                sprintf(activityString, "normalactive:%f",activity);
++            	value->sValue=activityString;
++            }else{
++                activityString = TMALLOC(char, strlen("Over-active") + 10);
++                sprintf(activityString, "overactive:%f",activity);
++            	value->sValue=activityString;
++            }
++            }else{
++            	activityString = TMALLOC(char, strlen("Unknown"));
++                sprintf(activityString, "Unknown");
++            	value->sValue=activityString;
++            }
++	  return(OK); 
+         default:
+             return(E_BADPARM);
+     }
+diff -aur ngspice-26.origin/src/spicelib/devices/ind/ind.c ngspice-26.new/src/spicelib/devices/ind/ind.c
+--- ngspice-26.origin/src/spicelib/devices/ind/ind.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/ind/ind.c	2014-08-20 17:53:49.615817229 +0200
+@@ -35,7 +35,12 @@
+     "dc sensitivity and imag part of ac sensitivty"),
+     OPU(  "sens_mag",  IND_QUEST_SENS_MAG,  IF_REAL, "sensitivity of AC magnitude"),
+     OPU(  "sens_ph",   IND_QUEST_SENS_PH,   IF_REAL, "sensitivity of AC phase"),
+-    OPU(  "sens_cplx", IND_QUEST_SENS_CPLX, IF_COMPLEX,    "ac sensitivity")
++    OPU(  "sens_cplx", IND_QUEST_SENS_CPLX, IF_COMPLEX,    "ac sensitivity"),
++    IOPP( "rated_current",   	IND_RATED_CURRENT,	     IF_REAL,    "rated current"),
++    IOP(   "activity",   	IND_ACTIVITY,	     IF_STRING,    "activity emotion"),
++    IOP(   "work_zone",   	IND_WORKING_ZONE,	     IF_STRING,    "working zone emotion"),
++    IOPU(   "energy_sum",   	IND_ENERGY_SUM,	     IF_REAL,    "activity energy sum"),
++    IOPU( "energy",   	IND_ENERGY,	     IF_REAL,    "max energy density")
+ };
+ 
+ IFparm INDmPTable[] = { /* model parameters */
+diff -aur ngspice-26.origin/src/spicelib/devices/ind/inddefs.h ngspice-26.new/src/spicelib/devices/ind/inddefs.h
+--- ngspice-26.origin/src/spicelib/devices/ind/inddefs.h	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/ind/inddefs.h	2014-08-20 17:56:26.802490295 +0200
+@@ -62,6 +62,17 @@
+     unsigned INDntGiven    : 1;   /* flag to indicate number of turns given */
+     int  INDsenParmNo;   /* parameter # for sensitivity use;
+             set equal to  0 if not a design parameter*/
++    unsigned INDratedCurrentGiven     :1;
++    unsigned INDactivityGiven     :1;
++    unsigned INDworkingZoneGiven     :1;
++    unsigned INDenergyGiven     :1;
++
++
++    double INDenergySum;
++    double INDenergy;
++    double INDratedCurrent;
++    char *INDactivity;
++    char *INDworkingZone;
+ 
+ } INDinstance ;
+ 
+@@ -161,6 +172,11 @@
+ #define IND_NT 12
+ #define IND_TC1 13
+ #define IND_TC2 14
++#define IND_ENERGY 15
++#define IND_ACTIVITY 16
++#define IND_WORKING_ZONE 17
++#define IND_ENERGY_SUM 18
++#define IND_RATED_CURRENT 19
+ 
+ /* model parameters */
+ #define IND_MOD_IND    100
+diff -aur ngspice-26.origin/src/spicelib/devices/ind/indinit.c ngspice-26.new/src/spicelib/devices/ind/indinit.c
+--- ngspice-26.origin/src/spicelib/devices/ind/indinit.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/ind/indinit.c	2014-08-20 17:57:21.972492540 +0200
+@@ -10,7 +10,7 @@
+ SPICEdev INDinfo = {
+     {
+         "Inductor",
+-        "Fixed inductor",
++        "Emotional Fixed inductor",
+ 
+         &INDnSize,
+         &INDnSize,
+diff -aur ngspice-26.origin/src/spicelib/devices/ind/indload.c ngspice-26.new/src/spicelib/devices/ind/indload.c
+--- ngspice-26.origin/src/spicelib/devices/ind/indload.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/ind/indload.c	2014-08-20 18:54:36.395965683 +0200
+@@ -39,7 +39,11 @@
+                 here=here->INDnextInstance) {
+ 
+             m = (here->INDm);
+-
++	   if(*(ckt->CKTrhsOld + here->INDbrEq)<0){
++	    here->INDenergySum-=*(ckt->CKTrhsOld + here->INDbrEq)* *(ckt->CKTrhsOld + here->INDbrEq)*here->INDinduct/m *1/2*ckt->CKTdeltaList[ckt->CKTtimeIndex];
++	  }else{
++		here->INDenergySum+=*(ckt->CKTrhsOld + here->INDbrEq)* *(ckt->CKTrhsOld + here->INDbrEq)*here->INDinduct/m *1/2*ckt->CKTdeltaList[ckt->CKTtimeIndex];
++	  }
+             if(!(ckt->CKTmode & (MODEDC|MODEINITPRED))) {
+                 if(ckt->CKTmode & MODEUIC && ckt->CKTmode & MODEINITTRAN) {
+                     *(ckt->CKTstate0 + here->INDflux) = here->INDinduct / m *
+diff -aur ngspice-26.origin/src/spicelib/devices/ind/indparam.c ngspice-26.new/src/spicelib/devices/ind/indparam.c
+--- ngspice-26.origin/src/spicelib/devices/ind/indparam.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/ind/indparam.c	2014-08-20 17:59:54.442498747 +0200
+@@ -62,6 +62,12 @@
+     case IND_IND_SENS:
+         here->INDsenParmNo = value->iValue;
+         break;
++    case IND_RATED_CURRENT:
++   	   here->INDratedCurrent = value->rValue;
++	   here->INDenergy = (here->INDratedCurrent*here->INDratedCurrent*here->INDinduct)*1/2;
++   	   here->INDratedCurrentGiven=TRUE;
++        break;
++
+     default:
+         return(E_BADPARM);
+     }
