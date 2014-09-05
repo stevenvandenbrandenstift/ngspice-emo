@@ -1,0 +1,257 @@
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capask.c ngspice-26.new/src/spicelib/devices/cap/capask.c
+--- ngspice-26.origin/src/spicelib/devices/cap/capask.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capask.c	2014-09-03 13:43:36.369946000 +0200
+@@ -23,6 +23,11 @@
+     double sr;
+     double si;
+     double vm;
++    double energy;
++    char *activityString;
++    double activity;   
++    char *workingZoneString;
++    double workingZone;
+     static char *msg = "Current and power not available for ac analysis";
+ 
+     switch(which) {
+@@ -164,9 +169,78 @@
+                         here->CAPsenParmNo);
+             }
+             return(OK);
+-
++    case CAP_MAX_ENERGY:
++        value->rValue = here->CAPmaxEnergy;
++        return(OK);
++    
++   case CAP_RATED_VOLTAGE:
++        value->rValue = here->CAPratedVoltage;
++        return(OK);
++
++    case CAP_WORKING_ZONE:
++    	    if (ckt->CKTrhsOld) {
++
++    		workingZone=here->CAPenergy/here->CAPmaxEnergy;
++
++            if(workingZone<0.5){
++            workingZoneString = TMALLOC(char, strlen("Sub-optimal") + 10);
++            sprintf(workingZoneString, "suboptimal:%f",workingZone);
++            value->sValue=workingZoneString;
++            }else if(workingZone<=1){
++                workingZoneString = TMALLOC(char, strlen("Optimal") + 10);
++               sprintf(workingZoneString, "optimal:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }else if(workingZone<1.1){
++                workingZoneString = TMALLOC(char, strlen("Out of Range") + 10);
++                sprintf(workingZoneString, "outofrange:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }else{
++                workingZoneString = TMALLOC(char, strlen("Destructive") + 10);
++                sprintf(workingZoneString, "destructive:%f",workingZone);
++            	value->sValue=workingZoneString;
++            }
++            }else{
++            	workingZoneString = TMALLOC(char, strlen("Unknown"));
++                sprintf(workingZoneString, "Unknown");
++               	value->sValue=workingZoneString;
++            }
++
++        return(OK);
++        
++        case CAP_ACTIVITY:
++        	if(ckt->CKTrhsOld){
++			
++           		if(ckt->CKTcurrentAnalysis &  (DOING_AC | DOING_TRAN)){
++        	   	activity=here->CAPenergy; // energy in cap
++        		activity+=(here->CAPoldEnergy-here->CAPenergy)/ckt->CKTdeltaList[ckt->CKTtimeIndex]; //divide by time lapse
++        		activity/=(here->CAPmaxEnergy); // normalize
++        		}else{ //dc or op
++            		activity=here->CAPenergy/(here->CAPmaxEnergy);
++        		}
++        	if(activity<0.1){
++            activityString = TMALLOC(char, strlen("Inactive") + 10);
++            sprintf(activityString, "inactive:%f",activity);
++            value->sValue=activityString;
++            }else if(activity<0.3){
++                activityString = TMALLOC(char, strlen("Sub-active") + 10);
++                sprintf(activityString, "subactive:%f",activity);
++            	value->sValue=activityString;
++            }else if(activity<=1.0){
++                activityString = TMALLOC(char, strlen("Normal-active") + 10);
++                sprintf(activityString, "normalactive:%f",activity);
++            	value->sValue=activityString;
++            }else{
++                activityString = TMALLOC(char, strlen("Over-active") + 10);
++                sprintf(activityString, "overactive:%f",activity);
++            	value->sValue=activityString;
++            }
++            }else{
++            	activityString = TMALLOC(char, strlen("Unknown"));
++                sprintf(activityString, "Unknown");
++            	value->sValue=activityString;
++            }
++	  return(OK); 
+         default:
+             return(E_BADPARM);
+         }
+ }
+-
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/cap.c ngspice-26.new/src/spicelib/devices/cap/cap.c
+--- ngspice-26.origin/src/spicelib/devices/cap/cap.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/cap.c	2014-09-03 13:36:23.573262000 +0200
+@@ -33,7 +33,11 @@
+     "dc sens. & imag part of ac sens."),
+     OPU(  "sens_mag",    CAP_QUEST_SENS_MAG,  IF_REAL, "sensitivity of ac magnitude"),
+     OPU(  "sens_ph",     CAP_QUEST_SENS_PH,   IF_REAL, "sensitivity of ac phase"),
+-    OPU(  "sens_cplx",   CAP_QUEST_SENS_CPLX, IF_COMPLEX, "ac sensitivity")
++    OPU(  "sens_cplx",   CAP_QUEST_SENS_CPLX, IF_COMPLEX, "ac sensitivity"),
++    IOPP( "rated_voltage",   	CAP_RATED_VOLTAGE,	     IF_REAL,    "rated voltage"),
++    IOP(   "activity",   	CAP_ACTIVITY,	     IF_STRING,    "activity emotion"),
++    IOP(   "work_zone",   	CAP_WORKING_ZONE,	     IF_STRING,    "working zone emotion"),
++    IOPU( "energy",   	CAP_MAX_ENERGY,	     IF_REAL,    "max energy density")
+ };
+ 
+ IFparm CAPmPTable[] = { /* names of model parameters */
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capdefs.h ngspice-26.new/src/spicelib/devices/cap/capdefs.h
+--- ngspice-26.origin/src/spicelib/devices/cap/capdefs.h	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capdefs.h	2014-09-03 10:44:12.116175000 +0200
+@@ -7,7 +7,6 @@
+ #ifndef CAP
+ #define CAP
+ 
+-
+ #include "ngspice/ifsim.h"
+ #include "ngspice/complex.h"
+ #include "ngspice/gendefs.h"
+@@ -60,6 +59,17 @@
+     unsigned CAPbv_maxGiven : 1;    /* flags indicates maximum voltage is given */
+     int    CAPsenParmNo;         /* parameter # for sensitivity use;
+                 set equal to  0 if not a design parameter*/
++    unsigned CAPratedVoltageGiven     :1;
++	unsigned CAPactivityGiven     :1;
++	unsigned CAPworkingZoneGiven     :1;
++    unsigned CAPenergyGiven     :1;
++
++    double CAPenergy;
++    double CAPmaxEnergy;
++    double CAPoldEnergy;
++    double CAPratedVoltage;
++    char *CAPactivity;
++    char *CAPworkingZone;
+ 
+ } CAPinstance ;
+ 
+@@ -126,6 +136,13 @@
+ #define CAP_TC1 12
+ #define CAP_TC2 13
+ #define CAP_BV_MAX 14
++/*emotions*/
++#define CAP_MAX_ENERGY 15
++#define CAP_ACTIVITY 16
++#define CAP_WORKING_ZONE 17
++#define CAP_RATED_VOLTAGE 18
++#define CAP_OLD_ENERGY 19
++
+ 
+ /* model parameters */
+ #define CAP_MOD_CJ 101
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capinit.c ngspice-26.new/src/spicelib/devices/cap/capinit.c
+--- ngspice-26.origin/src/spicelib/devices/cap/capinit.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capinit.c	2014-08-06 19:11:08.218885000 +0200
+@@ -9,7 +9,7 @@
+ 
+ SPICEdev CAPinfo = {
+     {   "Capacitor",
+-        "Fixed capacitor",
++        "emotional fixed capacitor",
+ 
+         &CAPnSize,
+         &CAPnSize,
+@@ -80,4 +80,4 @@
+ get_cap_info(void)
+ {
+     return &CAPinfo;
+-}
++}
+\ No newline at end of file
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capload.c ngspice-26.new/src/spicelib/devices/cap/capload.c
+--- ngspice-26.origin/src/spicelib/devices/cap/capload.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capload.c	2014-09-03 10:52:13.182861000 +0200
+@@ -45,10 +45,13 @@
+ 
+                 if(cond1) {
+                     vcap = here->CAPinitCond;
++		    here->CAPoldEnergy=(here->CAPcapac*vcap*vcap)/2;
+                 } else {
++		    here->CAPoldEnergy=(here->CAPcapac*vcap*vcap)/2;
+                     vcap = *(ckt->CKTrhsOld+here->CAPposNode) -
+                            *(ckt->CKTrhsOld+here->CAPnegNode) ;
+                 }
++		here->CAPenergy=(here->CAPcapac*vcap*vcap)/2;
+                 if(ckt->CKTmode & (MODETRAN | MODEAC)) {
+ #ifndef PREDICTOR
+                     if(ckt->CKTmode & MODEINITPRED) {
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capparam.c ngspice-26.new/src/spicelib/devices/cap/capparam.c
+--- ngspice-26.origin/src/spicelib/devices/cap/capparam.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capparam.c	2014-09-03 10:45:27.879511000 +0200
+@@ -77,6 +77,12 @@
+         here->CAPbv_max = value->rValue;
+         here->CAPbv_maxGiven = TRUE;
+         break;
++    case CAP_RATED_VOLTAGE:
++   	   here->CAPratedVoltage = value->rValue;
++	   here->CAPmaxEnergy = (here->CAPratedVoltage*here->CAPratedVoltage*here->CAPcapac)*1/2;
++   	   here->CAPratedVoltageGiven=TRUE;
++        break;
++
+     default:
+         return(E_BADPARM);
+     }
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capsetup.c ngspice-26.new/src/spicelib/devices/cap/capsetup.c
+--- ngspice-26.origin/src/spicelib/devices/cap/capsetup.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capsetup.c	2014-09-03 14:34:01.583403000 +0200
+@@ -90,7 +90,8 @@
+         /* loop through all the instances of the model */
+         for (here = model->CAPinstances; here != NULL ;
+                 here=here->CAPnextInstance) {
+-
++	
++	    here->CAPenergy=0;
+             /* Default Value Processing for Capacitor Instance */
+             if (!here->CAPlengthGiven) {
+                 here->CAPlength = 0;
+diff -aur ngspice-26.origin/src/spicelib/devices/cap/capsload.c ngspice-26.new/src/spicelib/devices/cap/capsload.c
+--- ngspice-26.origin/src/spicelib/devices/cap/capsload.c	2014-01-11 16:28:59.000000000 +0100
++++ ngspice-26.new/src/spicelib/devices/cap/capsload.c	2014-09-03 14:50:18.063443000 +0200
+@@ -27,6 +27,7 @@
+     CAPinstance *here;
+     int      iparmno;
+     double   vcap;
++    double   vcapn;
+     double   Osxp; 
+     double   tag0; 
+     double   tag1; 
+@@ -62,10 +63,12 @@
+             printf("senload instance name %s\n",here->CAPname);
+             printf("pos = %d , neg = %d \n",here->CAPposNode ,here->CAPnegNode);
+ #endif /* SENSDEBUG */
+-
++		
++	    here->CAPoldEnergy=here->CAPenergy;
+             vcap = *(ckt->CKTrhsOld+here->CAPposNode) 
+                 - *(ckt->CKTrhsOld+here->CAPnegNode) ;   
+-
++	   
++	
+             for(iparmno=1;iparmno<=info->SENparms;iparmno++){
+                 Osxp = tag0 * *(ckt->CKTstate1 + here->CAPsensxp
+                             + 2*(iparmno - 1))
+@@ -90,6 +93,9 @@
+                 *(info->SEN_RHS[here->CAPnegNode] + iparmno) -= Osxp;
+ 
+             }
++		vcapn = *(ckt->CKTrhs+here->CAPposNode) - *(ckt->CKTrhs+here->CAPnegNode) ;
++		here->CAPenergy=vcapn*vcapn*here->CAPcapac*1/2;
++		
+         }
+     }
+     return(OK);
+Only in ngspice-26.new/src/spicelib/devices/cap: Makefile
